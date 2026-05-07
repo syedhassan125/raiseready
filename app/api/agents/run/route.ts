@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Anthropic from "@anthropic-ai/sdk"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/auth"
-import { AGENT_PROMPTS, AgentContext } from "@/lib/agentPrompts"
+import { AGENT_SYSTEM_PROMPTS, buildUserMessage, AgentContext } from "@/lib/agentPrompts"
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 
@@ -75,13 +75,15 @@ async function runAgents(
         data: { status: "IN_PROGRESS", startedAt: new Date() },
       })
 
-      const promptFn = AGENT_PROMPTS[agent.agentType]
-      if (!promptFn) continue
+      const systemPrompt = AGENT_SYSTEM_PROMPTS[agent.agentType]
+      const userMessage = buildUserMessage(agent.agentType, ctx)
+      if (!systemPrompt || !userMessage) continue
 
       const message = await client.messages.create({
         model: "claude-opus-4-7",
         max_tokens: 4096,
-        messages: [{ role: "user", content: promptFn(ctx) }],
+        system: systemPrompt,
+        messages: [{ role: "user", content: userMessage }],
       })
 
       const output = message.content[0].type === "text" ? message.content[0].text : ""
