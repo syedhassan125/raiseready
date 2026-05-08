@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { signOut } from "next-auth/react"
+import ReactMarkdown from "react-markdown"
 import { useRouter } from "next/navigation"
 
 const AGENT_CONFIG = [
@@ -371,8 +372,19 @@ export default function DashboardClient({
                 </svg>
               </button>
             </div>
-            <div className="overflow-y-auto p-6">
-              <pre className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap font-mono">{selectedReport.content}</pre>
+            <div className="overflow-y-auto p-6 prose prose-invert prose-sm max-w-none
+              prose-headings:text-white prose-headings:font-semibold
+              prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+              prose-p:text-slate-300 prose-p:leading-relaxed
+              prose-strong:text-white
+              prose-code:text-cyan-400 prose-code:bg-white/5 prose-code:px-1 prose-code:rounded
+              prose-pre:bg-white/5 prose-pre:border prose-pre:border-white/10
+              prose-table:text-slate-300 prose-thead:border-white/20 prose-tr:border-white/10
+              prose-th:text-white prose-th:font-semibold
+              prose-li:text-slate-300 prose-ul:text-slate-300
+              prose-blockquote:border-cyan-500 prose-blockquote:text-slate-400
+              prose-hr:border-white/10">
+              <ReactMarkdown>{selectedReport.content}</ReactMarkdown>
             </div>
           </div>
         </div>

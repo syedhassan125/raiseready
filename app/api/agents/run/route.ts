@@ -57,6 +57,13 @@ export async function POST(req: NextRequest) {
     website: application.website,
   }
 
+  // Only run agents that haven't completed yet
+  const pendingAgents = application.agents.filter((a) => a.status !== "COMPLETED")
+  if (pendingAgents.length === 0) {
+    await prisma.application.update({ where: { id: applicationId }, data: { status: "COMPLETED" } })
+    return NextResponse.json({ success: true, message: "All agents already completed" })
+  }
+
   // Create a shared cloud environment for this run
   const env = await client.beta.environments.create({
     name: `raiseready-${applicationId.slice(-8)}`,
@@ -64,7 +71,7 @@ export async function POST(req: NextRequest) {
   })
 
   // Run agents in background — don't await
-  runAgents(applicationId, application.agents, ctx, env.id)
+  runAgents(applicationId, pendingAgents, ctx, env.id)
 
   return NextResponse.json({ success: true, message: "Agents started" })
 }
