@@ -57,8 +57,14 @@ export async function POST(req: NextRequest) {
     website: application.website,
   }
 
+  // Create a shared cloud environment for this run
+  const env = await client.beta.environments.create({
+    name: `raiseready-${applicationId.slice(-8)}`,
+    config: { type: "cloud", networking: { type: "limited" } },
+  })
+
   // Run agents in background — don't await
-  runAgents(applicationId, application.agents, ctx)
+  runAgents(applicationId, application.agents, ctx, env.id)
 
   return NextResponse.json({ success: true, message: "Agents started" })
 }
@@ -66,57 +72,99 @@ export async function POST(req: NextRequest) {
 async function runAgents(
   applicationId: string,
   agents: { id: string; agentType: string }[],
-  ctx: AgentContext
+  ctx: AgentContext,
+  environmentId: string
 ) {
-  for (const agent of agents) {
+  for (const agentRecord of agents) {
+    const systemPrompt = AGENT_SYSTEM_PROMPTS[agentRecord.agentType]
+    const userMessage = buildUserMessage(agentRecord.agentType, ctx)
+    if (!systemPrompt || !userMessage) continue
+
+    let agentId: string | null = null
+
     try {
       await prisma.agentJob.update({
-        where: { id: agent.id },
+        where: { id: agentRecord.id },
         data: { status: "IN_PROGRESS", startedAt: new Date() },
       })
 
-      const systemPrompt = AGENT_SYSTEM_PROMPTS[agent.agentType]
-      const userMessage = buildUserMessage(agent.agentType, ctx)
-      if (!systemPrompt || !userMessage) continue
-
-      const message = await client.messages.create({
+      // Create the managed agent
+      const managedAgent = await client.beta.agents.create({
+        name: `${agentRecord.agentType.toLowerCase()}-${applicationId.slice(-6)}`,
         model: "claude-opus-4-7",
-        max_tokens: 4096,
         system: systemPrompt,
-        messages: [{ role: "user", content: userMessage }],
+      })
+      agentId = managedAgent.id
+
+      // Create a session
+      const agentSession = await client.beta.sessions.create({
+        agent: managedAgent.id,
+        environment_id: environmentId,
       })
 
-      const output = message.content[0].type === "text" ? message.content[0].text : ""
+      // Stream the response
+      const stream = await client.beta.sessions.events.stream(agentSession.id)
 
-      await prisma.agentJob.update({
-        where: { id: agent.id },
-        data: { status: "COMPLETED", completedAt: new Date(), outputUrl: output },
+      await client.beta.sessions.events.send(agentSession.id, {
+        events: [{ type: "user.message", content: [{ type: "text", text: userMessage }] }],
       })
 
-      await prisma.deliverable.create({
-        data: {
-          applicationId,
-          name: DELIVERABLE_NAMES[agent.agentType] || agent.agentType,
-          type: "REPORT",
-          fileUrl: output,
-          isReady: true,
-        },
-      })
+      let output = ""
+      let errored = false
+
+      for await (const event of stream) {
+        if (event.type === "agent.message") {
+          for (const block of (event as { content?: { type: string; text?: string }[] }).content || []) {
+            if (block.type === "text" && block.text) output += block.text
+          }
+        }
+        if (event.type === "session.error") {
+          console.error(`Agent ${agentRecord.agentType} session error:`, (event as { error?: { message: string } }).error?.message)
+          errored = true
+          break
+        }
+        if (event.type === "session.status_idle") break
+      }
+
+      if (!errored && output) {
+        await prisma.agentJob.update({
+          where: { id: agentRecord.id },
+          data: { status: "COMPLETED", completedAt: new Date(), outputUrl: output },
+        })
+
+        await prisma.deliverable.create({
+          data: {
+            applicationId,
+            name: DELIVERABLE_NAMES[agentRecord.agentType] || agentRecord.agentType,
+            type: "REPORT",
+            fileUrl: output,
+            isReady: true,
+          },
+        })
+      } else {
+        await prisma.agentJob.update({
+          where: { id: agentRecord.id },
+          data: { status: "QUEUED" },
+        })
+      }
     } catch (err) {
-      console.error(`Agent ${agent.agentType} failed:`, err)
+      console.error(`Agent ${agentRecord.agentType} failed:`, err)
       await prisma.agentJob.update({
-        where: { id: agent.id },
+        where: { id: agentRecord.id },
         data: { status: "QUEUED" },
       })
+    } finally {
+      // Archive the managed agent after use
+      if (agentId) await client.beta.agents.archive(agentId).catch(() => {})
     }
   }
 
-  // Mark application complete when all agents done
-  const allDone = await prisma.agentJob.findMany({
-    where: { applicationId },
-  })
-  const allCompleted = allDone.every((a) => a.status === "COMPLETED")
-  if (allCompleted) {
+  // Archive the shared environment
+  await client.beta.environments.archive(environmentId).catch(() => {})
+
+  // Mark application complete if all agents done
+  const allJobs = await prisma.agentJob.findMany({ where: { applicationId } })
+  if (allJobs.every((a) => a.status === "COMPLETED")) {
     await prisma.application.update({
       where: { id: applicationId },
       data: { status: "COMPLETED" },
