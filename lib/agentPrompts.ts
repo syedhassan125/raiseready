@@ -272,7 +272,16 @@ export function buildUserMessage(agentType: string, ctx: AgentContext): string {
 
     KYC_SCREENER: base + `\nProduce a complete KYC & Compliance Readiness Package for ${ctx.startupName} preparing to onboard institutional investors. Include: entity file structure, UBO documentation requirements, KYC/AML rules-engine checklist, sanctions/PEP screening methodology, regulatory compliance review for ${ctx.industry} in the UK/EU, and an escalation packet with risk rating recommendation and 30-day action plan.`,
 
-    VALUATION_REVIEWER: base + `\nProduce a Valuation Review Report for ${ctx.startupName}'s ${ctx.amountRaising} ${ctx.stage} raise. Include: valuation methodology selection and rationale, trading comps for the ${ctx.industry} peer set, precedent transactions, DCF model assumptions, football-field valuation range, pre/post-money cap table impact, and LP reporting pack with investor return scenarios at 3x, 5x, and 10x.`,
+    VALUATION_REVIEWER: base + `\nA founder has asked you to produce a pre-seed valuation memo to help them understand what valuation to set for their upcoming raise. This is Option A: a founder-facing valuation memo, not a fund LP report.
+
+Produce a Founder Valuation Memo for ${ctx.startupName} (${ctx.industry}, ${ctx.stage} stage, raising ${ctx.amountRaising}). Include:
+1. Recommended valuation methodology for a ${ctx.stage} ${ctx.industry} startup (revenue multiples, ARR multiples, comparable transaction approach, or Berkus/scorecard for pre-revenue)
+2. Trading comps — list 5-8 comparable public or recently-acquired ${ctx.industry} companies with EV/Revenue and EV/ARR multiples
+3. Precedent transactions — 3-5 recent ${ctx.stage} raises in ${ctx.industry} with implied valuations
+4. Football-field summary — valuation range from each method, central estimate
+5. Pre-money / post-money cap table impact at low/mid/high valuation scenarios for a ${ctx.amountRaising} raise
+6. Investor return scenarios — what return multiples a lead investor would need to see at 3x, 5x, 10x exit
+7. Negotiation anchors — what to emphasise in investor conversations to justify the upper end of the range`,
 
     MODEL_BUILDER: base + `\nBuild a complete Financial Model Summary for ${ctx.startupName}. Include: revenue model with drivers specific to ${ctx.industry}, 5-year P&L projection (monthly Year 1, quarterly Years 2–3, annual Years 4–5), headcount plan, COGS and opex structure benchmarked to ${ctx.industry} comps, cash flow model, use of proceeds from the ${ctx.amountRaising} raise, break-even analysis, and sensitivity tables on key assumptions.`,
 
